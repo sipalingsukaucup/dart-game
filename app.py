@@ -86,7 +86,7 @@ def save_score():
     misses = data.get('misses')
     duration = data.get('duration')
 
-    if not all([player_id, score is not None, misses is not None, duration is not None]):
+    if player_id is None or score is None or misses is None or duration is None:
         return jsonify({'error': 'All fields are required'}), 400
 
     conn = get_db()
@@ -105,8 +105,8 @@ def leaderboard():
     results = conn.execute('''
         SELECT p.name, MAX(s.score) as best_score, COUNT(s.id) as games_played
         FROM players p
-        LEFT JOIN scores s ON p.id = s.player_id
-        GROUP BY p.name
+        INNER JOIN scores s ON p.id = s.player_id
+        GROUP BY p.id, p.name
         ORDER BY best_score DESC
         LIMIT 20
     ''').fetchall()

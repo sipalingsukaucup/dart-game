@@ -85,46 +85,74 @@
         .login-card {
             background: var(--card);
             border: 1px solid var(--border);
-            border-top: 2px linear-gradient(to right, var(--red), var(--gold));
+            border-top: 2px solid var(--red);
             border-radius: 12px;
             padding: 40px;
             text-align: center;
-            min-width: 320px;
+            width: 360px;
             box-shadow: 0 0 30px rgba(230, 57, 70, 0.2);
         }
 
         .login-card h1 {
             color: var(--gold);
             font-size: 3rem;
-            margin-bottom: 30px;
+            margin-bottom: 6px;
             text-transform: uppercase;
         }
 
-        .login-form {
+        .login-subtitle {
+            color: var(--dim);
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.82rem;
+            margin-bottom: 28px;
+            letter-spacing: 1px;
+        }
+
+        .login-fields {
             display: flex;
             flex-direction: column;
-            gap: 15px;
+            gap: 12px;
             margin-bottom: 20px;
         }
 
-        .login-form label {
+        .field-label {
             font-family: 'Share Tech Mono', monospace;
             color: var(--dim);
-            font-size: 0.9rem;
+            font-size: 0.75rem;
+            text-align: left;
+            margin-bottom: 4px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
         }
 
-        .player-select-container {
+        .field-divider {
             display: flex;
-            gap: 10px;
             align-items: center;
+            gap: 12px;
+            margin: 4px 0;
+        }
+
+        .field-divider::before,
+        .field-divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--border);
+        }
+
+        .field-divider span {
+            color: var(--dim);
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.75rem;
         }
 
         input[type="text"], select {
+            width: 100%;
             background: #070710;
             border: 1px solid var(--border);
             color: var(--text);
             padding: 12px 16px;
-            font-size: 1.1rem;
+            font-size: 1.05rem;
             border-radius: 6px;
             font-family: 'Rajdhani', sans-serif;
             outline: none;
@@ -134,6 +162,10 @@
         input[type="text"]:focus, select:focus {
             border-color: var(--red);
             box-shadow: 0 0 10px rgba(230, 57, 70, 0.3);
+        }
+
+        select option {
+            background: #12121a;
         }
 
         .btn {
@@ -148,6 +180,7 @@
             transition: transform 0.2s, box-shadow 0.3s;
             text-transform: uppercase;
             letter-spacing: 1px;
+            width: 100%;
         }
 
         .btn:hover {
@@ -161,25 +194,19 @@
 
         .btn-secondary {
             background: linear-gradient(135deg, var(--dim), #6a737d);
+            width: auto;
         }
 
         .btn-secondary:hover {
             box-shadow: 0 5px 20px rgba(141, 153, 174, 0.3);
         }
 
-        .existing-players {
-            margin-top: 20px;
-        }
-
-        .existing-players h3 {
-            font-size: 1rem;
-            color: var(--dim);
+        #login-error {
+            color: var(--red);
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.82rem;
+            min-height: 18px;
             margin-bottom: 10px;
-        }
-
-        .existing-players select {
-            padding: 10px 16px;
-            font-size: 1rem;
         }
 
         /* Game Screen */
@@ -199,7 +226,7 @@
             gap: 40px;
             background: var(--card);
             border: 1px solid var(--border);
-            border-top: 2px linear-gradient(to right, var(--red), var(--gold));
+            border-top: 2px solid var(--red);
             border-radius: 12px;
             padding: 15px 30px;
             font-family: 'Share Tech Mono', monospace;
@@ -283,7 +310,7 @@
         .leaderboard-card {
             background: var(--card);
             border: 1px solid var(--border);
-            border-top: 2px linear-gradient(to right, var(--red), var(--gold));
+            border-top: 2px solid var(--red);
             border-radius: 12px;
             padding: 40px;
             min-width: 500px;
@@ -403,27 +430,23 @@
     <!-- Login Screen -->
     <div id="login-screen" class="screen active">
         <div class="login-card">
-            <h1>Dart Shooter</h1>
-            <div class="login-form">
-                <div class="player-select-container">
+            <h1>Dart Shooter 🎯</h1>
+            <p class="login-subtitle">by Krisna Ganteng</p>
+            <div class="login-fields">
+                <div>
+                    <div class="field-label">New Player</div>
+                    <input type="text" id="new-player-name" placeholder="Type your name..." maxlength="20">
+                </div>
+                <div class="field-divider"><span>or</span></div>
+                <div>
+                    <div class="field-label">Existing Player</div>
                     <select id="existing-player">
-                        <option value="">Select existing player</option>
+                        <option value="">— Select player —</option>
                     </select>
-                    <button class="btn btn-secondary" id="select-player-btn" disabled>Login</button>
                 </div>
-                <div style="text-align: center; margin: 10px 0;">
-                    <span style="color: var(--dim); font-size: 0.9rem;">or</span>
-                </div>
-                <label>New Player Name</label>
-                <input type="text" id="new-player-name" placeholder="Enter your name..." maxlength="20">
             </div>
-            <button class="btn" id="create-player-btn">Play Game</button>
-            <div class="existing-players">
-                <h3>Existing Players</h3>
-                <select id="existing-players-list">
-                    <option value="">-- No players yet --</option>
-                </select>
-            </div>
+            <div id="login-error"></div>
+            <button class="btn" id="play-btn">Play</button>
         </div>
     </div>
 
@@ -547,57 +570,50 @@
         }
 
         function updatePlayerSelect(players) {
-            const existingPlayerSelect = document.getElementById('existing-player');
-            const existingPlayersList = document.getElementById('existing-players-list');
-
-            // Clear and repopulate
-            existingPlayerSelect.innerHTML = '<option value="">Select existing player</option>';
-            existingPlayersList.innerHTML = '';
-
-            if (players.length === 0) {
-                existingPlayersList.innerHTML = '<option value="">-- No players yet --</option>';
-                document.getElementById('select-player-btn').disabled = true;
-                return;
-            }
-
+            const sel = document.getElementById('existing-player');
+            sel.innerHTML = '<option value="">— Select player —</option>';
             players.forEach(player => {
-                const option = document.createElement('option');
-                option.value = player.id;
-                option.textContent = player.name;
-                existingPlayerSelect.appendChild(option);
-
-                const listOption = document.createElement('option');
-                listOption.value = player.id;
-                listOption.textContent = player.name;
-                existingPlayersList.appendChild(listOption);
-            });
-
-            // Enable select button if there's a selection
-            existingPlayerSelect.addEventListener('change', () => {
-                document.getElementById('select-player-btn').disabled = existingPlayerSelect.value === '';
+                const opt = document.createElement('option');
+                opt.value = player.id;
+                opt.textContent = player.name;
+                sel.appendChild(opt);
             });
         }
 
         function setupEventListeners() {
-            // Login screen
-            const createPlayerBtn = document.getElementById('create-player-btn');
-            const selectPlayerBtn = document.getElementById('select-player-btn');
-            const existingPlayerSelect = document.getElementById('existing-player');
-            const newPlayerNameInput = document.getElementById('new-player-name');
-            const existingPlayersList = document.getElementById('existing-players-list');
+            const playBtn = document.getElementById('play-btn');
+            const nameInput = document.getElementById('new-player-name');
+            const playerSelect = document.getElementById('existing-player');
 
-            createPlayerBtn.addEventListener('click', async () => {
-                const name = newPlayerNameInput.value.trim();
+            async function handlePlay() {
+                const name = nameInput.value.trim();
+                const playerId = playerSelect.value;
+                const errorEl = document.getElementById('login-error');
+                errorEl.textContent = '';
+
                 if (name) {
+                    // New or returning player by name
                     await registerPlayer(name);
+                } else if (playerId) {
+                    // Existing player via dropdown
+                    await loginPlayer(playerId);
+                } else {
+                    errorEl.textContent = 'Type a name or select an existing player.';
                 }
+            }
+
+            playBtn.addEventListener('click', handlePlay);
+
+            nameInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') handlePlay();
             });
 
-            selectPlayerBtn.addEventListener('click', async () => {
-                const playerId = existingPlayerSelect.value;
-                if (playerId) {
-                    await loginPlayer(playerId);
-                }
+            // Auto-clear name when dropdown is picked and vice versa
+            playerSelect.addEventListener('change', () => {
+                if (playerSelect.value) nameInput.value = '';
+            });
+            nameInput.addEventListener('input', () => {
+                if (nameInput.value) playerSelect.value = '';
             });
 
             // Play again / Change player
@@ -611,16 +627,6 @@
 
             // Canvas click
             canvas.addEventListener('mousedown', handleCanvasClick);
-
-            // Handle enter key in input
-            newPlayerNameInput.addEventListener('keypress', async (e) => {
-                if (e.key === 'Enter') {
-                    const name = newPlayerNameInput.value.trim();
-                    if (name) {
-                        await registerPlayer(name);
-                    }
-                }
-            });
         }
 
         async function registerPlayer(name) {
