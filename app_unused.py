@@ -1,19 +1,44 @@
 import os
+import sqlite3
 from flask import Flask, request, jsonify, send_from_directory
-from supabase import create_client, Client
-from dotenv import load_dotenv
-
-load_dotenv()
 
 app = Flask(__name__, static_folder=os.path.abspath(os.path.join(os.path.dirname(__file__), 'static')))
 
-# ─────────────────────────────────────────────
-#  Supabase Client
-# ─────────────────────────────────────────────
-SUPABASE_URL = os.environ.get("SUPABASE_URL")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'dart_game.db')
 
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+def get_db():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def init_db():
+    conn = get_db()
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS players (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL
+        )
+    ''')
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS scores (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            player_id INTEGER NOT NULL,
+            score INTEGER NOT NULL,
+            misses INTEGER NOT NULL,
+            duration INTEGER NOT NULL,
+            total_shots INTEGER NOT NULL DEFAULT 0,
+            avg_click_speed REAL NOT NULL DEFAULT 0,
+            accuracy_pct REAL NOT NULL DEFAULT 0,
+            bullseye_pct REAL NOT NULL DEFAULT 0,
+            miss_interval REAL NOT NULL DEFAULT 0,
+            played_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (player_id) REFERENCES players (id)
+        )
+    ''')
+    conn.commit()
+    conn.close()
 
 
 # ─────────────────────────────────────────────
@@ -75,12 +100,13 @@ ARCHETYPES = [
         "title": "🌱 The Rookie",
         "description": "Everyone starts somewhere. You've got the spirit — now the board wants your precision.",
         "tip": "Focus on clicking only when you're sure it's a hit. Fewer shots, higher accuracy = way more points.",
-        "condition": lambda s: True
+        "condition": lambda s: True  # fallback
     }
 ]
 
 
 def compute_archetype(stats: dict) -> dict:
+    """Return the first matching archetype for a given stats dict."""
     for arch in ARCHETYPES:
         if arch["condition"](stats):
             return {
@@ -108,8 +134,10 @@ def index():
 
 @app.route('/api/players', methods=['GET'])
 def list_players():
-    res = supabase.table('players').select('id, name').order('name').execute()
-    return jsonify(res.data)
+    conn = get_db()
+    players = conn.execute('SELECT id, name FROM players ORDER BY name').fetchall()
+    conn.close()
+    return jsonify([{'id': p['id'], 'name': p['name']} for p in players])
 
 
 @app.route('/api/players', methods=['POST'])
@@ -119,32 +147,43 @@ def create_player():
     if not name:
         return jsonify({'error': 'Name is required'}), 400
 
-    # Cek dulu apakah player sudah ada
-    existing = supabase.table('players').select('id, name').eq('name', name).execute()
-    if existing.data:
-        return jsonify(existing.data[0]), 200
-
-    # Buat player baru
-    res = supabase.table('players').insert({'name': name}).execute()
-    if res.data:
-        return jsonify(res.data[0]), 201
-
-    return jsonify({'error': 'Failed to create player'}), 500
+    conn = get_db()
+    try:
+        cursor = conn.execute('INSERT INTO players (name) VALUES (?)', (name,))
+        conn.commit()
+        return jsonify({'id': cursor.lastrowid, 'name': name}), 201
+    except sqlite3.IntegrityError:
+        # BUG FIX: player exists → just return their data instead of error
+        player = conn.execute('SELECT id, name FROM players WHERE name = ?', (name,)).fetchone()
+        conn.close()
+        if player:
+            return jsonify({'id': player['id'], 'name': player['name']}), 200
+        return jsonify({'error': 'Player name already taken'}), 409
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 
 @app.route('/api/players/<int:player_id>')
 def get_player_by_id(player_id):
-    res = supabase.table('players').select('id, name').eq('id', player_id).execute()
-    if res.data:
-        return jsonify(res.data[0])
+    """BUG FIX: loginPlayer() passes an ID (int), not a name."""
+    conn = get_db()
+    player = conn.execute('SELECT id, name FROM players WHERE id = ?', (player_id,)).fetchone()
+    conn.close()
+    if player:
+        return jsonify({'id': player['id'], 'name': player['name']})
     return jsonify({'error': 'Player not found'}), 404
 
 
 @app.route('/api/players/by-name/<name>')
 def get_player_by_name(name):
-    res = supabase.table('players').select('id, name').eq('name', name).execute()
-    if res.data:
-        return jsonify(res.data[0])
+    conn = get_db()
+    player = conn.execute('SELECT id, name FROM players WHERE name = ?', (name,)).fetchone()
+    conn.close()
+    if player:
+        return jsonify({'id': player['id'], 'name': player['name']})
     return jsonify({'error': 'Player not found'}), 404
 
 
@@ -161,83 +200,81 @@ def save_score():
             return jsonify({'error': f'Missing field: {field}'}), 400
 
     stats = {
-        'misses':          data['misses'],
-        'total_shots':     data['total_shots'],
+        'misses': data['misses'],
+        'total_shots': data['total_shots'],
         'avg_click_speed': data['avg_click_speed'],
-        'accuracy_pct':    data['accuracy_pct'],
-        'bullseye_pct':    data['bullseye_pct'],
-        'miss_interval':   data['miss_interval'],
+        'accuracy_pct': data['accuracy_pct'],
+        'bullseye_pct': data['bullseye_pct'],
+        'miss_interval': data['miss_interval'],
     }
     archetype = compute_archetype(stats)
 
-    res = supabase.table('scores').insert({
-        'player_id':       data['player_id'],
-        'score':           data['score'],
-        'misses':          data['misses'],
-        'duration':        data['duration'],
-        'total_shots':     data['total_shots'],
-        'avg_click_speed': data['avg_click_speed'],
-        'accuracy_pct':    data['accuracy_pct'],
-        'bullseye_pct':    data['bullseye_pct'],
-        'miss_interval':   data['miss_interval'],
-    }).execute()
+    conn = get_db()
+    cursor = conn.execute(
+        '''INSERT INTO scores
+           (player_id, score, misses, duration, total_shots,
+            avg_click_speed, accuracy_pct, bullseye_pct, miss_interval)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+        (data['player_id'], data['score'], data['misses'], data['duration'],
+         data['total_shots'], data['avg_click_speed'], data['accuracy_pct'],
+         data['bullseye_pct'], data['miss_interval'])
+    )
+    conn.commit()
+    conn.close()
 
-    if not res.data:
-        return jsonify({'error': 'Failed to save score'}), 500
-
-    return jsonify({'id': res.data[0]['id'], 'success': True, 'archetype': archetype})
+    return jsonify({'id': cursor.lastrowid, 'success': True, 'archetype': archetype})
 
 
 @app.route('/api/leaderboard')
 def leaderboard():
-    # Ambil semua scores + nama player-nya sekalian
-    res = supabase.table('scores').select(
-        'score, misses, total_shots, avg_click_speed, accuracy_pct, bullseye_pct, miss_interval, player_id, players(name)'
-    ).order('score', desc=True).execute()
-
-    if not res.data:
-        return jsonify([])
-
-    # Grupkan per player, ambil best score
-    best = {}
-    for row in res.data:
-        pid = row['player_id']
-        if pid not in best:
-            best[pid] = row
-        # Hitung games_played (semua rows per player)
-
-    # Hitung games_played per player
-    games_res = supabase.table('scores').select('player_id').execute()
-    games_count = {}
-    for row in games_res.data:
-        pid = row['player_id']
-        games_count[pid] = games_count.get(pid, 0) + 1
+    conn = get_db()
+    # Pull the best-score row per player (all metrics from that run)
+    results = conn.execute('''
+        SELECT
+            p.name,
+            s.score        AS best_score,
+            s.misses,
+            s.total_shots,
+            s.avg_click_speed,
+            s.accuracy_pct,
+            s.bullseye_pct,
+            s.miss_interval,
+            COUNT(s2.id)   AS games_played
+        FROM players p
+        INNER JOIN scores s ON s.player_id = p.id
+            AND s.score = (SELECT MAX(s3.score) FROM scores s3 WHERE s3.player_id = p.id)
+        INNER JOIN scores s2 ON s2.player_id = p.id
+        GROUP BY p.id, p.name, s.score, s.misses, s.total_shots,
+                 s.avg_click_speed, s.accuracy_pct, s.bullseye_pct, s.miss_interval
+        ORDER BY best_score DESC
+        LIMIT 20
+    ''').fetchall()
+    conn.close()
 
     rows = []
-    for pid, r in best.items():
+    for r in results:
         stats = {
-            'misses':          r['misses'],
-            'total_shots':     r['total_shots'],
+            'misses': r['misses'],
+            'total_shots': r['total_shots'],
             'avg_click_speed': r['avg_click_speed'],
-            'accuracy_pct':    r['accuracy_pct'],
-            'bullseye_pct':    r['bullseye_pct'],
-            'miss_interval':   r['miss_interval'],
+            'accuracy_pct': r['accuracy_pct'],
+            'bullseye_pct': r['bullseye_pct'],
+            'miss_interval': r['miss_interval'],
         }
         archetype = compute_archetype(stats)
         rows.append({
-            'name':            r['players']['name'],
-            'best_score':      r['score'],
-            'games_played':    games_count.get(pid, 1),
+            'name': r['name'],
+            'best_score': r['best_score'],
+            'games_played': r['games_played'],
             'avg_click_speed': round(r['avg_click_speed'], 2),
-            'accuracy_pct':    round(r['accuracy_pct'], 1),
-            'bullseye_pct':    round(r['bullseye_pct'], 1),
-            'miss_interval':   round(r['miss_interval'], 1),
-            'archetype':       archetype,
+            'accuracy_pct': round(r['accuracy_pct'], 1),
+            'bullseye_pct': round(r['bullseye_pct'], 1),
+            'miss_interval': round(r['miss_interval'], 1),
+            'archetype': archetype,
         })
-
-    rows.sort(key=lambda x: x['best_score'], reverse=True)
-    return jsonify(rows[:20])
+    return jsonify(rows)
 
 
 if __name__ == '__main__':
+    init_db()
     app.run(debug=True)
