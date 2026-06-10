@@ -273,6 +273,9 @@
             </div>
             <div id="login-error"></div>
             <button class="btn" id="play-btn">▶ Play</button>
+            <button class="btn btn-secondary" id="leaderboard-btn" style="margin-top: 8px;">
+                🏆 View Leaderboard
+            </button>
         </div>
     </div>
 
@@ -483,10 +486,26 @@
             playerSelect.addEventListener('change', () => { if (playerSelect.value) nameInput.value = ''; });
             nameInput.addEventListener('input',     () => { if (nameInput.value)     playerSelect.value = ''; });
 
-            document.getElementById('play-again-btn').addEventListener('click', () => startGame());
+            document.getElementById('play-again-btn').addEventListener('click', () => {
+                switchScreen('game');
+                startGame();
+            });
             document.getElementById('change-player-btn').addEventListener('click', () => switchScreen('login'));
 
+            document.getElementById('leaderboard-btn').addEventListener('click', () => {
+                gameState.currentPlayer = gameState.currentPlayer || { name: null };
+                switchScreen('leaderboard');
+                fetchLeaderboard(true);
+                gameState.fromLogin = true;
+            });
+
             canvas.addEventListener('mousedown', handleCanvasClick);
+
+            document.getElementById('leaderboard-btn').addEventListener('click', () => {
+                gameState.currentPlayer = gameState.currentPlayer || { name: null };
+                switchScreen('leaderboard');
+                fetchLeaderboard(true);
+            });
         }
 
         // BUG FIX: POST now returns 200 for existing players too (handled server-side)
@@ -500,6 +519,7 @@
                 const data = await res.json();
                 if (res.ok) {
                     gameState.currentPlayer = data;
+                    await fetchPlayers(); // ← di DALAM try, sebelum switchScreen
                     switchScreen('game');
                     startGame();
                 } else {
@@ -509,6 +529,7 @@
                 console.error(e);
                 document.getElementById('login-error').textContent = 'Connection error.';
             }
+            // ← hapus semua yang ada di sini
         }
 
         // BUG FIX: dropdown stores player ID → hit /api/players/:id (int route)
@@ -552,6 +573,7 @@
             gameState.lastShotTime  = null;
             gameState.missTimestamps = [];
             gameState.particles     = [];
+            gameState.fromLogin = false;
 
             respawnTarget();
 
@@ -816,7 +838,30 @@
         // ─────────────────────────────────────────
         //  Leaderboard
         // ─────────────────────────────────────────
-        async function fetchLeaderboard() {
+        async function fetchLeaderboard(fromLogin = false) {
+            document.querySelector('.archetype-card').style.display = 
+                fromLogin ? 'none' : 'block';
+            
+            // Render tombol sesuai konteks
+            const btnWrapper = document.querySelector('.leaderboard-buttons');
+            if (fromLogin) {
+                btnWrapper.innerHTML = `
+                    <button class="btn btn-secondary" id="change-player-btn" style="max-width:260px">
+                        🏠 Back to Home
+                    </button>`;
+            } else {
+                btnWrapper.innerHTML = `
+                    <button class="btn" id="play-again-btn">▶ Play Again</button>
+                    <button class="btn btn-secondary" id="change-player-btn">Change Player</button>`;
+            }
+
+            // Re-attach listeners karena innerHTML direset
+            document.getElementById('change-player-btn').addEventListener('click', () => switchScreen('login'));
+            document.querySelector('#play-again-btn')?.addEventListener('click', () => {
+                switchScreen('game');
+                startGame();
+            });
+            
             const tbody = document.querySelector('#leaderboard-table tbody');
             try {
                 const res  = await fetch(`${API_BASE}/api/leaderboard`);
