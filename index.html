@@ -1,0 +1,999 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dart Shooter Game</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root {
+            --red: #e63946;
+            --gold: #ffd60a;
+            --green: #57cc99;
+            --cyan: #48cae4;
+            --purple: #9b5de5;
+            --dim: #8d99ae;
+            --bg: #0a0a0f;
+            --card: #12121a;
+            --border: #1e1e2e;
+            --text: #edf2f4;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+
+        body {
+            font-family: 'Rajdhani', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            height: 100vh;
+            overflow: hidden;
+            position: relative;
+        }
+
+        body::before {
+            content: '';
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: repeating-linear-gradient(to bottom, transparent, transparent 2px, rgba(0,0,0,0.08) 3px);
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .screen {
+            display: none; flex-direction: column; align-items: center; justify-content: center;
+            height: 100%; width: 100%;
+            animation: fadeIn 0.4s ease;
+        }
+        .screen.active { display: flex; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+        h1, h2, h3 { font-family: 'Bebas Neue', sans-serif; letter-spacing: 2px; }
+
+        /* ── Login ── */
+        #login-screen { z-index: 10; background: linear-gradient(135deg, #0a0a0f 0%, #1a1a2e 100%); }
+
+        .login-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-top: 2px solid var(--red);
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            width: 360px;
+            box-shadow: 0 0 40px rgba(230, 57, 70, 0.15);
+        }
+        .login-card h1 { color: var(--gold); font-size: 3rem; margin-bottom: 6px; }
+        .login-subtitle {
+            color: var(--dim); font-family: 'Share Tech Mono', monospace;
+            font-size: 0.82rem; margin-bottom: 28px; letter-spacing: 1px;
+        }
+        .login-fields { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
+        .field-label {
+            font-family: 'Share Tech Mono', monospace; color: var(--dim);
+            font-size: 0.75rem; text-align: left; margin-bottom: 4px;
+            letter-spacing: 1px; text-transform: uppercase;
+        }
+        .field-divider { display: flex; align-items: center; gap: 12px; margin: 4px 0; }
+        .field-divider::before, .field-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+        .field-divider span { color: var(--dim); font-family: 'Share Tech Mono', monospace; font-size: 0.75rem; }
+
+        input[type="text"], select {
+            width: 100%; background: #070710; border: 1px solid var(--border);
+            color: var(--text); padding: 12px 16px; font-size: 1.05rem;
+            border-radius: 6px; font-family: 'Rajdhani', sans-serif;
+            outline: none; transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        input[type="text"]:focus, select:focus {
+            border-color: var(--red); box-shadow: 0 0 10px rgba(230, 57, 70, 0.3);
+        }
+        select option { background: #12121a; }
+
+        .btn {
+            background: linear-gradient(135deg, var(--red), #c92a3a);
+            color: white; border: none; padding: 14px 32px;
+            font-size: 1.2rem; font-family: 'Bebas Neue', sans-serif;
+            border-radius: 6px; cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.3s;
+            text-transform: uppercase; letter-spacing: 1px; width: 100%;
+        }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 5px 20px rgba(230, 57, 70, 0.4); }
+        .btn:active { transform: translateY(0); }
+        .btn-secondary { background: linear-gradient(135deg, #2a2a3e, #1e1e2e); width: auto; border: 1px solid var(--border); }
+        .btn-secondary:hover { box-shadow: 0 5px 20px rgba(141, 153, 174, 0.2); }
+
+        #login-error {
+            color: var(--red); font-family: 'Share Tech Mono', monospace;
+            font-size: 0.82rem; min-height: 18px; margin-bottom: 10px;
+        }
+
+        /* ── Game Screen ── */
+        #game-screen { position: relative; }
+        .game-container { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+
+        .hud {
+            display: flex; gap: 40px;
+            background: var(--card); border: 1px solid var(--border);
+            border-top: 2px solid var(--red); border-radius: 12px;
+            padding: 14px 28px; font-family: 'Share Tech Mono', monospace;
+            min-width: 400px; justify-content: space-between;
+        }
+        .hud-item { text-align: center; }
+        .hud-label { font-size: 0.78rem; color: var(--dim); margin-bottom: 4px; letter-spacing: 1px; }
+        .hud-value { font-size: 1.7rem; color: var(--text); }
+        .hud-value.timer.warning { color: var(--red); animation: pulse 1s infinite; }
+
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+        .canvas-wrapper {
+            position: relative; border-radius: 12px; overflow: hidden;
+            box-shadow: 0 0 50px rgba(0, 0, 0, 0.6);
+        }
+        canvas { background: #070710; display: block; cursor: crosshair; }
+
+        /* ── Leaderboard / Result Screen ── */
+        #leaderboard-screen {
+            background: linear-gradient(135deg, #0a0a0f 0%, #1a1a2e 100%);
+            z-index: 20;
+            overflow-y: auto;
+            padding: 20px 0;
+            justify-content: flex-start;
+        }
+
+        .result-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            width: 100%;
+            max-width: 760px;
+            padding: 0 20px;
+            margin: 0 auto;
+        }
+
+        /* Archetype Card */
+        .archetype-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 28px 32px;
+            width: 100%;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+        .archetype-card::before {
+            content: '';
+            position: absolute; top: 0; left: 0; right: 0; height: 3px;
+            background: linear-gradient(90deg, var(--purple), var(--cyan), var(--gold));
+        }
+        .result-header { font-size: 1.6rem; margin-bottom: 4px; }
+        .result-header.win { color: var(--gold); }
+        .result-header.lose { color: var(--red); }
+
+        .result-player { color: var(--cyan); font-family: 'Share Tech Mono', monospace; font-size: 1rem; margin-bottom: 16px; }
+
+        .stat-row {
+            display: flex; justify-content: center; gap: 24px;
+            margin-bottom: 20px; flex-wrap: wrap;
+        }
+        .stat-box {
+            background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+            border-radius: 8px; padding: 10px 18px; text-align: center; min-width: 100px;
+        }
+        .stat-box .s-label { font-family: 'Share Tech Mono', monospace; font-size: 0.7rem; color: var(--dim); letter-spacing: 1px; margin-bottom: 4px; }
+        .stat-box .s-value { font-family: 'Bebas Neue', sans-serif; font-size: 1.6rem; }
+        .stat-box .s-value.gold { color: var(--gold); }
+        .stat-box .s-value.red { color: var(--red); }
+        .stat-box .s-value.green { color: var(--green); }
+        .stat-box .s-value.cyan { color: var(--cyan); }
+
+        .archetype-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, rgba(155,93,229,0.2), rgba(72,202,228,0.2));
+            border: 1px solid rgba(155,93,229,0.5);
+            border-radius: 100px;
+            padding: 6px 20px;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.4rem;
+            letter-spacing: 2px;
+            color: var(--text);
+            margin-bottom: 10px;
+        }
+        .archetype-desc {
+            color: var(--dim); font-size: 0.95rem; line-height: 1.5;
+            max-width: 480px; margin: 0 auto 12px;
+        }
+        .archetype-tip {
+            display: flex; align-items: flex-start; gap: 10px;
+            background: rgba(72,202,228,0.08); border: 1px solid rgba(72,202,228,0.25);
+            border-radius: 8px; padding: 12px 16px;
+            text-align: left; font-size: 0.9rem; color: var(--cyan);
+            max-width: 480px; margin: 0 auto;
+        }
+        .archetype-tip::before { content: '💡'; flex-shrink: 0; }
+
+        /* Leaderboard Table */
+        .leaderboard-card {
+            background: var(--card); border: 1px solid var(--border);
+            border-top: 2px solid var(--red); border-radius: 12px;
+            padding: 28px 32px; width: 100%;
+        }
+        .leaderboard-card h2 {
+            font-size: 1.8rem; margin-bottom: 16px; color: var(--text);
+            border-bottom: 1px solid var(--border); padding-bottom: 10px;
+        }
+
+        .lb-table-wrap { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; min-width: 560px; }
+        th, td { padding: 10px 12px; text-align: left; font-family: 'Rajdhani', sans-serif; }
+        th { color: var(--dim); font-weight: 600; border-bottom: 1px solid var(--border); font-size: 0.85rem; letter-spacing: 1px; text-transform: uppercase; }
+        td { border-bottom: 1px solid rgba(30,30,46,0.8); font-size: 0.95rem; }
+        tr:last-child td { border-bottom: none; }
+        tr.is-me td { background: rgba(255, 214, 10, 0.07); }
+        tr.is-me td:first-child { border-left: 3px solid var(--gold); }
+
+        .lb-archetype { font-size: 0.8rem; color: var(--purple); font-family: 'Share Tech Mono', monospace; }
+        .lb-score { color: var(--gold); font-family: 'Bebas Neue', sans-serif; font-size: 1.2rem; }
+        .lb-acc { color: var(--green); }
+        .lb-speed { color: var(--cyan); }
+
+        .leaderboard-buttons { display: flex; gap: 12px; justify-content: center; margin-top: 20px; }
+        .leaderboard-buttons .btn { flex: 1; max-width: 220px; }
+
+        @media (max-width: 768px) {
+            .login-card { padding: 25px; width: 90%; }
+            .login-card h1 { font-size: 2rem; }
+            .hud { flex-direction: column; gap: 10px; min-width: 300px; }
+            .hud-value { font-size: 1.4rem; }
+            .result-wrapper { padding: 0 12px; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ── Login Screen ── -->
+    <div id="login-screen" class="screen active">
+        <div class="login-card">
+            <h1>Dart Shooter 🎯</h1>
+            <p class="login-subtitle">by Krisna Ganteng</p>
+            <div class="login-fields">
+                <div>
+                    <div class="field-label">New Player</div>
+                    <input type="text" id="new-player-name" placeholder="Type your name..." maxlength="20">
+                </div>
+                <div class="field-divider"><span>or</span></div>
+                <div>
+                    <div class="field-label">Existing Player</div>
+                    <select id="existing-player">
+                        <option value="">— Select player —</option>
+                    </select>
+                </div>
+            </div>
+            <div id="login-error"></div>
+            <button class="btn" id="play-btn">▶ Play</button>
+            <button class="btn btn-secondary" id="leaderboard-btn" style="margin-top: 8px;">
+                🏆 View Leaderboard
+            </button>
+        </div>
+    </div>
+
+    <!-- ── Game Screen ── -->
+    <div id="game-screen" class="screen">
+        <div class="game-container">
+            <div class="hud">
+                <div class="hud-item">
+                    <div class="hud-label">Player</div>
+                    <div class="hud-value" id="hud-player">—</div>
+                </div>
+                <div class="hud-item">
+                    <div class="hud-label">Time</div>
+                    <div class="hud-value timer" id="hud-timer">03:00</div>
+                </div>
+                <div class="hud-item">
+                    <div class="hud-label">Score</div>
+                    <div class="hud-value" id="hud-score">0</div>
+                </div>
+                <div class="hud-item">
+                    <div class="hud-label">Misses</div>
+                    <div class="hud-value" id="hud-misses">0/5</div>
+                </div>
+            </div>
+            <div class="canvas-wrapper">
+                <canvas id="game-canvas" width="800" height="500"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Result + Leaderboard Screen ── -->
+    <div id="leaderboard-screen" class="screen">
+        <div class="result-wrapper">
+
+            <!-- Archetype Card (this session) -->
+            <div class="archetype-card">
+                <h1 id="end-message" class="result-header lose">GAME OVER</h1>
+                <div class="result-player" id="result-player-name">—</div>
+
+                <div class="stat-row" id="result-stats">
+                    <div class="stat-box">
+                        <div class="s-label">Score</div>
+                        <div class="s-value gold" id="result-score">0</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="s-label">Misses</div>
+                        <div class="s-value red" id="result-misses">0</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="s-label">Accuracy</div>
+                        <div class="s-value green" id="result-accuracy">—%</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="s-label">Avg Speed</div>
+                        <div class="s-value cyan" id="result-speed">—s</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="s-label">Bullseye %</div>
+                        <div class="s-value gold" id="result-bullseye">—%</div>
+                    </div>
+                </div>
+
+                <div class="archetype-badge" id="archetype-title">🌱 The Rookie</div>
+                <p class="archetype-desc" id="archetype-desc">—</p>
+                <div class="archetype-tip" id="archetype-tip">—</div>
+            </div>
+
+            <!-- Leaderboard Table -->
+            <div class="leaderboard-card">
+                <h2>🏆 Leaderboard</h2>
+                <div class="lb-table-wrap">
+                    <table id="leaderboard-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Player</th>
+                                <th>Archetype</th>
+                                <th>Score</th>
+                                <th>Accuracy</th>
+                                <th>Avg Speed</th>
+                                <th>Games</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td colspan="7" style="text-align:center;color:var(--dim)">Loading…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="leaderboard-buttons">
+                <button class="btn" id="play-again-btn">▶ Play Again</button>
+                <button class="btn btn-secondary" id="change-player-btn">Change Player</button>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // ─────────────────────────────────────────
+        //  Constants
+        // ─────────────────────────────────────────
+        const TARGET_RADIUS = 52;
+        const MAX_MISSES    = 5;
+        const MAX_TIME      = 180;
+        const CANVAS_WIDTH  = 800;
+        const CANVAS_HEIGHT = 500;
+
+        // ─────────────────────────────────────────
+        //  Supabase Client
+        //  Ganti dua nilai di bawah ini!
+        // ─────────────────────────────────────────
+        const SUPABASE_URL = 'https://msyykawhxbdsfxazwfyw.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1zeXlrYXdoeGJkc2Z4YXp3Znl3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwODk0MTQsImV4cCI6MjA5NjY2NTQxNH0.bMPMSxcxO-ibhmHyZG0aSlJKUwQfAoOUefNK6J08ljs';
+        const { createClient } = supabase;
+        const db = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        // ─────────────────────────────────────────
+        //  AI Archetype Engine (dipindah dari Python)
+        // ─────────────────────────────────────────
+        const ARCHETYPES = [
+            {
+                id: 'sniper_god', title: '🎯 Sniper God',
+                description: 'Cold. Calculated. Lethal. Your precision defies physics — most shots land dead center while the rest never miss the board.',
+                tip: "Keep pushing your bullseye ratio. You're already elite; perfection is one session away.",
+                condition: s => s.bullseye_pct >= 40 && s.accuracy_pct >= 85
+            },
+            {
+                id: 'the_flash', title: '⚡ The Flash',
+                description: "Nobody clicks faster. Your reaction speed is inhuman — the target barely moves before you've already fired.",
+                tip: 'Speed is your superpower. Work on precision next; a fast AND accurate shooter is unstoppable.',
+                condition: s => s.avg_click_speed <= 1.2 && s.total_shots >= 10
+            },
+            {
+                id: 'iron_wall', title: '🛡️ Iron Wall',
+                description: "Patience incarnate. You almost never miss — and when you do, it haunts you. Consistency is your weapon.",
+                tip: 'Your miss rate is extremely low. Try pushing your speed to climb the leaderboard even higher.',
+                condition: s => s.misses <= 1 && s.total_shots >= 8
+            },
+            {
+                id: 'the_marksman', title: '🔫 The Marksman',
+                description: "Methodical and reliable. High accuracy, steady rhythm — you make it look easy.",
+                tip: "Try to increase your click speed without sacrificing accuracy. That's the path to the top.",
+                condition: s => s.accuracy_pct >= 75 && s.avg_click_speed <= 2.0
+            },
+            {
+                id: 'the_speedrunner', title: '🏃 The Speedrunner',
+                description: "You play like you're late to something. Aggressive clicks, high volume — sheer speed keeps your score up.",
+                tip: 'Slow down just a little before firing. A 10% accuracy gain will more than compensate for the slower pace.',
+                condition: s => s.avg_click_speed <= 1.5 && s.accuracy_pct < 70
+            },
+            {
+                id: 'bullseye_hunter', title: '🌟 Bullseye Hunter',
+                description: "You live for the gold ring. Others aim to hit — you aim to dominate. Bullseye or nothing.",
+                tip: 'Amazing center accuracy! Work on keeping this up even as target speed increases later in the game.',
+                condition: s => s.bullseye_pct >= 30
+            },
+            {
+                id: 'steady_hand', title: '✋ Steady Hand',
+                description: "Calm under pressure. Your shot timing is remarkably consistent — no panic, no rush.",
+                tip: 'Great composure! Try targeting the bullseye more deliberately to convert consistency into higher scores.',
+                condition: s => s.miss_interval >= 20 && s.accuracy_pct >= 60
+            },
+            {
+                id: 'the_rookie', title: '🌱 The Rookie',
+                description: "Everyone starts somewhere. You've got the spirit — now the board wants your precision.",
+                tip: 'Focus on clicking only when you\'re sure it\'s a hit. Fewer shots, higher accuracy = way more points.',
+                condition: () => true
+            }
+        ];
+
+        function computeArchetype(stats) {
+            return ARCHETYPES.find(a => a.condition(stats)) || ARCHETYPES[ARCHETYPES.length - 1];
+        }
+
+        // ─────────────────────────────────────────
+        //  Game State
+        // ─────────────────────────────────────────
+        let gameState = {
+            score: 0,
+            misses: 0,
+            timeLeft: MAX_TIME,
+            gameActive: false,
+            elapsed: 0,
+            currentPlayer: null,
+            lastUpdate: 0,          // BUG FIX: initialised properly
+            animationFrame: null,
+            timer: null,
+
+            // Shot tracking for AI metrics
+            shots: [],              // { time: ms, hit: bool, ratio: float, zone: str }
+            lastShotTime: null,
+            missTimestamps: [],
+
+            target: {
+                x: CANVAS_WIDTH / 2,
+                y: CANVAS_HEIGHT / 2,
+                dx: 1, dy: 1, speed: 1.2
+            },
+            particles: []
+        };
+
+        // DOM
+        const screens = {
+            login:       document.getElementById('login-screen'),
+            game:        document.getElementById('game-screen'),
+            leaderboard: document.getElementById('leaderboard-screen')
+        };
+        const canvas = document.getElementById('game-canvas');
+        const ctx    = canvas.getContext('2d');
+
+        // ─────────────────────────────────────────
+        //  Boot
+        // ─────────────────────────────────────────
+        document.addEventListener('DOMContentLoaded', () => {
+            setupCanvas();
+            fetchPlayers();
+            setupEventListeners();
+        });
+
+        // ─────────────────────────────────────────
+        //  Canvas Setup  (BUG FIX: called once, no re-stacking)
+        // ─────────────────────────────────────────
+        function setupCanvas() {
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width  = CANVAS_WIDTH  * dpr;
+            canvas.height = CANVAS_HEIGHT * dpr;
+            canvas.style.width  = `${CANVAS_WIDTH}px`;
+            canvas.style.height = `${CANVAS_HEIGHT}px`;
+            ctx.scale(dpr, dpr);
+        }
+
+        // ─────────────────────────────────────────
+        //  Login
+        // ─────────────────────────────────────────
+        async function fetchPlayers() {
+            try {
+                const { data, error } = await db.from('players').select('id, name').order('name');
+                if (error) throw error;
+                const sel = document.getElementById('existing-player');
+                sel.innerHTML = '<option value="">— Select player —</option>';
+                data.forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p.id;
+                    opt.textContent = p.name;
+                    sel.appendChild(opt);
+                });
+            } catch (e) { console.error(e); }
+        }
+
+        function setupEventListeners() {
+            const playBtn      = document.getElementById('play-btn');
+            const nameInput    = document.getElementById('new-player-name');
+            const playerSelect = document.getElementById('existing-player');
+
+            async function handlePlay() {
+                const name     = nameInput.value.trim();
+                const playerId = playerSelect.value;
+                document.getElementById('login-error').textContent = '';
+
+                if (name) {
+                    await registerOrLoginByName(name);
+                } else if (playerId) {
+                    await loginById(parseInt(playerId));
+                } else {
+                    document.getElementById('login-error').textContent = 'Type a name or select an existing player.';
+                }
+            }
+
+            playBtn.addEventListener('click', handlePlay);
+            nameInput.addEventListener('keypress', e => { if (e.key === 'Enter') handlePlay(); });
+
+            playerSelect.addEventListener('change', () => { if (playerSelect.value) nameInput.value = ''; });
+            nameInput.addEventListener('input',     () => { if (nameInput.value)     playerSelect.value = ''; });
+
+            document.getElementById('play-again-btn').addEventListener('click', () => {
+                switchScreen('game');
+                startGame();
+            });
+            document.getElementById('change-player-btn').addEventListener('click', () => switchScreen('login'));
+
+            document.getElementById('leaderboard-btn').addEventListener('click', () => {
+                gameState.currentPlayer = gameState.currentPlayer || { name: null };
+                switchScreen('leaderboard');
+                fetchLeaderboard(true);
+                gameState.fromLogin = true;
+            });
+
+            canvas.addEventListener('mousedown', handleCanvasClick);
+
+            document.getElementById('leaderboard-btn').addEventListener('click', () => {
+                gameState.currentPlayer = gameState.currentPlayer || { name: null };
+                switchScreen('leaderboard');
+                fetchLeaderboard(true);
+            });
+        }
+
+        async function registerOrLoginByName(name) {
+            try {
+                // Cek dulu apakah player sudah ada
+                const { data: existing } = await db.from('players').select('id, name').eq('name', name).maybeSingle();
+                if (existing) {
+                    gameState.currentPlayer = existing;
+                    await fetchPlayers();
+                    switchScreen('game');
+                    startGame();
+                    return;
+                }
+                // Buat player baru
+                const { data, error } = await db.from('players').insert({ name }).select().single();
+                if (error) throw error;
+                gameState.currentPlayer = data;
+                await fetchPlayers();
+                switchScreen('game');
+                startGame();
+            } catch (e) {
+                console.error(e);
+                document.getElementById('login-error').textContent = 'Connection error.';
+            }
+        }
+
+        async function loginById(playerId) {
+            try {
+                const { data, error } = await db.from('players').select('id, name').eq('id', playerId).single();
+                if (error) throw error;
+                gameState.currentPlayer = data;
+                switchScreen('game');
+                startGame();
+            } catch (e) {
+                console.error(e);
+                document.getElementById('login-error').textContent = 'Player not found.';
+            }
+        }
+
+        function switchScreen(name) {
+            Object.values(screens).forEach(s => s.classList.remove('active'));
+            screens[name].classList.add('active');
+        }
+
+        // ─────────────────────────────────────────
+        //  Game Loop
+        // ─────────────────────────────────────────
+        function startGame() {
+            // Clear old timer / animation before resetting
+            if (gameState.timer)          clearInterval(gameState.timer);
+            if (gameState.animationFrame) cancelAnimationFrame(gameState.animationFrame);
+
+            gameState.score         = 0;
+            gameState.misses        = 0;
+            gameState.timeLeft      = MAX_TIME;
+            gameState.elapsed       = 0;
+            gameState.gameActive    = true;
+            gameState.lastUpdate    = 0;
+            gameState.shots         = [];
+            gameState.lastShotTime  = null;
+            gameState.missTimestamps = [];
+            gameState.particles     = [];
+            gameState.fromLogin = false;
+
+            respawnTarget();
+
+            document.getElementById('hud-player').textContent = gameState.currentPlayer.name;
+            document.getElementById('hud-score').textContent  = '0';
+            document.getElementById('hud-misses').textContent = `0/${MAX_MISSES}`;
+            document.getElementById('hud-timer').textContent  = formatTime(MAX_TIME);
+            document.getElementById('hud-timer').classList.remove('warning');
+
+            gameState.animationFrame = requestAnimationFrame(gameLoop);
+
+            gameState.timer = setInterval(() => {
+                gameState.timeLeft--;
+                gameState.elapsed++;
+                document.getElementById('hud-timer').textContent = formatTime(gameState.timeLeft);
+                if (gameState.timeLeft <= 30) document.getElementById('hud-timer').classList.add('warning');
+                if (gameState.timeLeft <= 0)  endGame('win');
+            }, 1000);
+        }
+
+        function gameLoop() {
+            if (!gameState.gameActive) return;
+            update();
+            draw();
+            gameState.animationFrame = requestAnimationFrame(gameLoop);
+        }
+
+        function update() {
+            const now = Date.now();
+            if (now - gameState.lastUpdate < 16) return;
+            gameState.lastUpdate = now;
+
+            const speed = 1.2 + gameState.elapsed * 0.025;
+            gameState.target.speed = speed;
+            gameState.target.x += gameState.target.dx * speed;
+            gameState.target.y += gameState.target.dy * speed;
+
+            if (gameState.target.x - TARGET_RADIUS <= 0 || gameState.target.x + TARGET_RADIUS >= CANVAS_WIDTH) {
+                gameState.target.dx *= -1;
+                gameState.target.x = Math.max(TARGET_RADIUS, Math.min(gameState.target.x, CANVAS_WIDTH - TARGET_RADIUS));
+            }
+            if (gameState.target.y - TARGET_RADIUS <= 0 || gameState.target.y + TARGET_RADIUS >= CANVAS_HEIGHT) {
+                gameState.target.dy *= -1;
+                gameState.target.y = Math.max(TARGET_RADIUS, Math.min(gameState.target.y, CANVAS_HEIGHT - TARGET_RADIUS));
+            }
+
+            gameState.particles = gameState.particles.filter(p => p.life > 0);
+            gameState.particles.forEach(p => { p.y -= p.vy; p.life -= 0.05; });
+        }
+
+        function draw() {
+            ctx.fillStyle = '#070710';
+            ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+            drawGrid();
+            drawTarget();
+            gameState.particles.forEach(p => {
+                ctx.globalAlpha = p.life;
+                ctx.fillStyle   = p.color;
+                ctx.font        = 'bold 24px "Bebas Neue"';
+                ctx.textAlign   = 'center';
+                ctx.fillText(p.text, p.x, p.y);
+                ctx.globalAlpha = 1;
+            });
+        }
+
+        function drawGrid() {
+            ctx.strokeStyle = 'rgba(30, 30, 60, 0.5)';
+            ctx.lineWidth   = 1;
+            for (let x = 0; x <= CANVAS_WIDTH;  x += 40) { ctx.beginPath(); ctx.moveTo(x, 0);           ctx.lineTo(x, CANVAS_HEIGHT); ctx.stroke(); }
+            for (let y = 0; y <= CANVAS_HEIGHT; y += 40) { ctx.beginPath(); ctx.moveTo(0, y);            ctx.lineTo(CANVAS_WIDTH, y);  ctx.stroke(); }
+        }
+
+        function drawTarget() {
+            const { x, y } = gameState.target;
+            ctx.shadowBlur  = 20;
+            ctx.shadowColor = '#e63946';
+
+            const rings = [
+                [1.00, '#1a1a2e'],
+                [0.85, '#e63946'],
+                [0.70, '#f1faee'],
+                [0.55, '#1d3557'],
+                [0.40, '#f1faee'],
+                [0.25, '#e63946'],
+                [0.10, '#ffd60a'],
+            ];
+            rings.forEach(([r, color]) => {
+                ctx.beginPath();
+                ctx.arc(x, y, TARGET_RADIUS * r, 0, Math.PI * 2);
+                ctx.fillStyle = color;
+                ctx.fill();
+            });
+            ctx.shadowBlur = 0;
+
+            ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+            ctx.lineWidth   = 1;
+            ctx.beginPath(); ctx.moveTo(x - TARGET_RADIUS, y); ctx.lineTo(x + TARGET_RADIUS, y); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(x, y - TARGET_RADIUS); ctx.lineTo(x, y + TARGET_RADIUS); ctx.stroke();
+        }
+
+        // ─────────────────────────────────────────
+        //  Click Handling + Shot Tracking
+        // ─────────────────────────────────────────
+        function handleCanvasClick(e) {
+            if (!gameState.gameActive) return;
+
+            const rect = canvas.getBoundingClientRect();
+            const cx   = (e.clientX - rect.left) * (CANVAS_WIDTH  / rect.width);
+            const cy   = (e.clientY - rect.top)  * (CANVAS_HEIGHT / rect.height);
+
+            const dx       = cx - gameState.target.x;
+            const dy       = cy - gameState.target.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            const ratio    = distance / TARGET_RADIUS;
+
+            const now = Date.now();
+
+            // Track click speed (interval between consecutive shots)
+            if (gameState.lastShotTime !== null) {
+                const interval = (now - gameState.lastShotTime) / 1000;
+                gameState.shots.push({ interval, hit: ratio <= 1.0, ratio });
+            } else {
+                gameState.shots.push({ interval: null, hit: ratio <= 1.0, ratio });
+            }
+            gameState.lastShotTime = now;
+
+            if (ratio <= 1.0) {
+                const points = getScorePoints(ratio);
+                gameState.score += points;
+                gameState.particles.push({ x: cx, y: cy, text: `+${points}`, color: '#ffd60a', vy: 2, life: 1 });
+                document.getElementById('hud-score').textContent = gameState.score;
+                respawnTarget();
+            } else {
+                gameState.misses++;
+                gameState.missTimestamps.push(now);
+                gameState.particles.push({ x: cx, y: cy, text: 'MISS!', color: '#e63946', vy: 2, life: 1 });
+                document.getElementById('hud-misses').textContent = `${gameState.misses}/${MAX_MISSES}`;
+                if (gameState.misses >= MAX_MISSES) endGame('lose');
+            }
+        }
+
+        function getScorePoints(ratio) {
+            if (ratio <= 0.06) return 50;
+            if (ratio <= 0.14) return 40;
+            if (ratio <= 0.26) return 30;
+            if (ratio <= 0.42) return 20;
+            if (ratio <= 0.60) return 15;
+            if (ratio <= 0.78) return 10;
+            return 5;
+        }
+
+        function respawnTarget() {
+            const pad = TARGET_RADIUS + 10;
+            gameState.target.x     = Math.random() * (CANVAS_WIDTH  - pad * 2) + pad;
+            gameState.target.y     = Math.random() * (CANVAS_HEIGHT - pad * 2) + pad;
+            const angle            = Math.random() * Math.PI * 2;
+            gameState.target.dx    = Math.cos(angle);
+            gameState.target.dy    = Math.sin(angle);
+        }
+
+        // ─────────────────────────────────────────
+        //  Metrics Computation
+        // ─────────────────────────────────────────
+        function computeMetrics() {
+            const shots   = gameState.shots;
+            const total   = shots.length;
+            const hits    = shots.filter(s => s.hit);
+            const hitCount = hits.length;
+
+            // Accuracy %
+            const accuracy_pct = total > 0 ? (hitCount / total) * 100 : 0;
+
+            // Bullseye % (ratio <= 0.10 = bullseye ring)
+            const bullseyes    = hits.filter(s => s.ratio <= 0.10).length;
+            const bullseye_pct = hitCount > 0 ? (bullseyes / hitCount) * 100 : 0;
+
+            // Avg click speed (seconds between shots, ignoring first shot)
+            const intervals = shots.map(s => s.interval).filter(v => v !== null);
+            const avg_click_speed = intervals.length > 0
+                ? intervals.reduce((a, b) => a + b, 0) / intervals.length
+                : 0;
+
+            // Miss interval (avg seconds between consecutive misses)
+            const mt = gameState.missTimestamps;
+            let miss_interval = 0;
+            if (mt.length >= 2) {
+                const diffs = [];
+                for (let i = 1; i < mt.length; i++) diffs.push((mt[i] - mt[i-1]) / 1000);
+                miss_interval = diffs.reduce((a, b) => a + b, 0) / diffs.length;
+            } else {
+                // No consecutive misses → very consistent; use elapsed as proxy
+                miss_interval = gameState.elapsed;
+            }
+
+            return {
+                total_shots:     total,
+                avg_click_speed: parseFloat(avg_click_speed.toFixed(3)),
+                accuracy_pct:    parseFloat(accuracy_pct.toFixed(2)),
+                bullseye_pct:    parseFloat(bullseye_pct.toFixed(2)),
+                miss_interval:   parseFloat(miss_interval.toFixed(2)),
+            };
+        }
+
+        // ─────────────────────────────────────────
+        //  End Game
+        // ─────────────────────────────────────────
+        function endGame(result) {
+            gameState.gameActive = false;
+            cancelAnimationFrame(gameState.animationFrame);
+            clearInterval(gameState.timer);
+            saveAndShowResult(result);
+        }
+
+        async function saveAndShowResult(result) {
+            const metrics = computeMetrics();
+
+            switchScreen('leaderboard');
+
+            const msg = document.getElementById('end-message');
+            msg.textContent = result === 'win' ? 'TIME UP!' : 'GAME OVER';
+            msg.className   = `result-header ${result === 'win' ? 'win' : 'lose'}`;
+
+            document.getElementById('result-player-name').textContent = gameState.currentPlayer.name;
+            document.getElementById('result-score').textContent       = gameState.score;
+            document.getElementById('result-misses').textContent      = gameState.misses;
+            document.getElementById('result-accuracy').textContent    = `${metrics.accuracy_pct.toFixed(1)}%`;
+            document.getElementById('result-speed').textContent       = `${metrics.avg_click_speed.toFixed(2)}s`;
+            document.getElementById('result-bullseye').textContent    = `${metrics.bullseye_pct.toFixed(1)}%`;
+
+            // Hitung archetype langsung di JS, ga perlu server
+            const arch = computeArchetype({ ...metrics, misses: gameState.misses });
+            renderArchetype(arch);
+
+            // Simpan ke Supabase
+            try {
+                const { error } = await db.from('scores').insert({
+                    player_id:       gameState.currentPlayer.id,
+                    score:           gameState.score,
+                    misses:          gameState.misses,
+                    duration:        gameState.elapsed,
+                    total_shots:     metrics.total_shots,
+                    avg_click_speed: metrics.avg_click_speed,
+                    accuracy_pct:    metrics.accuracy_pct,
+                    bullseye_pct:    metrics.bullseye_pct,
+                    miss_interval:   metrics.miss_interval,
+                });
+                if (error) throw error;
+            } catch (e) {
+                console.error('Save error:', e);
+            }
+
+            fetchLeaderboard();
+        }
+
+        function renderArchetype(arch) {
+            document.getElementById('archetype-title').textContent = arch.title;
+            document.getElementById('archetype-desc').textContent  = arch.description;
+            document.getElementById('archetype-tip').textContent   = arch.tip;
+        }
+
+        // ─────────────────────────────────────────
+        //  Leaderboard
+        // ─────────────────────────────────────────
+        async function fetchLeaderboard(fromLogin = false) {
+            document.querySelector('.archetype-card').style.display =
+                fromLogin ? 'none' : 'block';
+
+            const btnWrapper = document.querySelector('.leaderboard-buttons');
+            if (fromLogin) {
+                btnWrapper.innerHTML = `
+                    <button class="btn btn-secondary" id="change-player-btn" style="max-width:260px">
+                        🏠 Back to Home
+                    </button>`;
+            } else {
+                btnWrapper.innerHTML = `
+                    <button class="btn" id="play-again-btn">▶ Play Again</button>
+                    <button class="btn btn-secondary" id="change-player-btn">Change Player</button>`;
+            }
+            document.getElementById('change-player-btn').addEventListener('click', () => switchScreen('login'));
+            document.querySelector('#play-again-btn')?.addEventListener('click', () => {
+                switchScreen('game');
+                startGame();
+            });
+
+            const tbody = document.querySelector('#leaderboard-table tbody');
+            try {
+                // Ambil semua scores + nama player sekaligus
+                const { data: allScores, error } = await db
+                    .from('scores')
+                    .select('score, misses, total_shots, avg_click_speed, accuracy_pct, bullseye_pct, miss_interval, player_id, players(name)')
+                    .order('score', { ascending: false });
+
+                if (error) throw error;
+
+                // Grupkan per player, ambil best score (data sudah sorted desc)
+                const best = {};
+                const gamesCount = {};
+                allScores.forEach(row => {
+                    const pid = row.player_id;
+                    gamesCount[pid] = (gamesCount[pid] || 0) + 1;
+                    if (!best[pid]) best[pid] = row;
+                });
+
+                const rows = Object.values(best).map(r => {
+                    const stats = {
+                        misses:          r.misses,
+                        total_shots:     r.total_shots,
+                        avg_click_speed: r.avg_click_speed,
+                        accuracy_pct:    r.accuracy_pct,
+                        bullseye_pct:    r.bullseye_pct,
+                        miss_interval:   r.miss_interval,
+                    };
+                    return {
+                        name:            r.players.name,
+                        best_score:      r.score,
+                        games_played:    gamesCount[r.player_id],
+                        avg_click_speed: r.avg_click_speed.toFixed(2),
+                        accuracy_pct:    r.accuracy_pct.toFixed(1),
+                        archetype:       computeArchetype(stats),
+                    };
+                }).sort((a, b) => b.best_score - a.best_score).slice(0, 20);
+
+                tbody.innerHTML = '';
+                if (rows.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--dim)">No scores yet</td></tr>';
+                    return;
+                }
+
+                const medals = { 1: '🥇', 2: '🥈', 3: '🥉' };
+                rows.forEach((entry, i) => {
+                    const rank = i + 1;
+                    const isMe = entry.name === gameState.currentPlayer?.name;
+                    const tr   = document.createElement('tr');
+                    if (isMe) tr.className = 'is-me';
+                    tr.innerHTML = `
+                        <td>${medals[rank] || ''}${rank}</td>
+                        <td>${entry.name}${isMe ? ' <span style="color:var(--gold);font-size:0.75rem">(you)</span>' : ''}</td>
+                        <td class="lb-archetype">${entry.archetype?.title || '—'}</td>
+                        <td class="lb-score">${entry.best_score}</td>
+                        <td class="lb-acc">${entry.accuracy_pct}%</td>
+                        <td class="lb-speed">${entry.avg_click_speed}s</td>
+                        <td style="color:var(--dim)">${entry.games_played}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+
+            } catch (e) {
+                console.error(e);
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--red)">Failed to load leaderboard</td></tr>';
+            }
+        }
+
+        // ─────────────────────────────────────────
+        //  Helpers
+        // ─────────────────────────────────────────
+        function formatTime(s) {
+            const m = Math.floor(s / 60);
+            return `${String(m).padStart(2,'0')}:${String(s % 60).padStart(2,'0')}`;
+        }
+    </script>
+</body>
+</html>
